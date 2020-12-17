@@ -94,10 +94,14 @@ public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanReg
 	 * @see org.springframework.beans.factory.FactoryBean#getObject()
 	 */
 	protected Object getObjectFromFactoryBean(FactoryBean<?> factory, String beanName, boolean shouldPostProcess) {
+		// COMMENT: 通过FactoryBean创建Bean的过程
+
 		if (factory.isSingleton() && containsSingleton(beanName)) {
+			// COMMENT: 如果FactoryBean的作用域是单例，并且在容器中包含了该Bean实例，则返回该Bean实例，否则需要通过FactoryBean创建Bean实例。
 			synchronized (getSingletonMutex()) {
 				Object object = this.factoryBeanObjectCache.get(beanName);
 				if (object == null) {
+					// COMMENT: factoryBeanObjectCache缓存为空，需要通过BeanFactory创建Bean来设置缓存
 					object = doGetObjectFromFactoryBean(factory, beanName);
 					// Only post-process and store if not put there already during getObject() call above
 					// (e.g. because of circular reference processing triggered by custom getBean calls)
@@ -124,6 +128,7 @@ public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanReg
 							}
 						}
 						if (containsSingleton(beanName)) {
+							// COMMENT: 当Bean存在于容器中以后，在factoryBeanObjectCache缓存中设置该Bean对象
 							this.factoryBeanObjectCache.put(beanName, object);
 						}
 					}
@@ -132,6 +137,9 @@ public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanReg
 			}
 		}
 		else {
+			// COMMENT:
+			// 如果FactoryBean的Scope不是单例或者容器还没有通过FactoryBean创建过Bean
+			// 则使用FactoryBean创建Bean对象
 			Object object = doGetObjectFromFactoryBean(factory, beanName);
 			if (shouldPostProcess) {
 				try {
@@ -156,6 +164,7 @@ public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanReg
 	private Object doGetObjectFromFactoryBean(FactoryBean<?> factory, String beanName) throws BeanCreationException {
 		Object object;
 		try {
+			// COMMENT: Bean创建过程受Java安全控制
 			if (System.getSecurityManager() != null) {
 				AccessControlContext acc = getAccessControlContext();
 				try {
@@ -166,6 +175,7 @@ public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanReg
 				}
 			}
 			else {
+				// COMMENT: 通过FactoryBean的getObject()方法创建Bean实例。
 				object = factory.getObject();
 			}
 		}

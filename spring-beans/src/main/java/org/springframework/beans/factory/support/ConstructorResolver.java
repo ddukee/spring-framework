@@ -154,6 +154,7 @@ class ConstructorResolver {
 			}
 		}
 
+		// COMMENT: 反射获取构造方法列表
 		if (constructorToUse == null || argsToUse == null) {
 			// Take specified constructors, if any.
 			Constructor<?>[] candidates = chosenCtors;
@@ -170,6 +171,7 @@ class ConstructorResolver {
 				}
 			}
 
+			// COMMENT: 通过没有参数的构造方法创建对象
 			if (candidates.length == 1 && explicitArgs == null && !mbd.hasConstructorArgumentValues()) {
 				Constructor<?> uniqueCandidate = candidates[0];
 				if (uniqueCandidate.getParameterCount() == 0) {

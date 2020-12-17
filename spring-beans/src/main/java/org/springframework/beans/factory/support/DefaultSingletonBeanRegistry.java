@@ -107,9 +107,11 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 	/** Map between containing bean names: bean name to Set of bean names that the bean contains. */
 	private final Map<String, Set<String>> containedBeanMap = new ConcurrentHashMap<>(16);
 
+	// COMMENT: 依赖关系，Key表示被依赖的Bean名称，Value表示依赖Key的Bean名称集合
 	/** Map between dependent bean names: bean name to Set of dependent bean names. */
 	private final Map<String, Set<String>> dependentBeanMap = new ConcurrentHashMap<>(64);
 
+	// COMMENT: 依赖关系，Key表示依赖的Bean名称，Value表示Key依赖的Bean的名称集合
 	/** Map between depending bean names: bean name to Set of bean names for the bean's dependencies. */
 	private final Map<String, Set<String>> dependenciesForBeanMap = new ConcurrentHashMap<>(64);
 
@@ -179,6 +181,8 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 	@Nullable
 	protected Object getSingleton(String beanName, boolean allowEarlyReference) {
 		// Quick check for existing instance without full singleton lock
+
+		// COMMENT: 通过Double-Check模式来保证多线程场景下只创建一个单例对象
 		Object singletonObject = this.singletonObjects.get(beanName);
 		if (singletonObject == null && isSingletonCurrentlyInCreation(beanName)) {
 			singletonObject = this.earlySingletonObjects.get(beanName);
@@ -189,10 +193,17 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 					if (singletonObject == null) {
 						singletonObject = this.earlySingletonObjects.get(beanName);
 						if (singletonObject == null) {
+							// COMMENT:
+							// 通过获取到的ObjectFactory来创建单例Bean对象。
+							// Spring将创建对象的过程通过ObjectFactory从创建Bean的流程中解耦出去。
 							ObjectFactory<?> singletonFactory = this.singletonFactories.get(beanName);
 							if (singletonFactory != null) {
 								singletonObject = singletonFactory.getObject();
+
+								// 在earlySingletonObjects中缓存提前创建的Bean实例对象
 								this.earlySingletonObjects.put(beanName, singletonObject);
+
+								// COMMENT: 创建完单例对象以后，将对应的ObjectFactory从单例工厂列表中删除，减少内存占用
 								this.singletonFactories.remove(beanName);
 							}
 						}
@@ -224,6 +235,7 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 				if (logger.isDebugEnabled()) {
 					logger.debug("Creating shared instance of singleton bean '" + beanName + "'");
 				}
+				// COMMENT: 在创建单例前在singletonsCurrentlyInCreation中注册正在被创建的Bean名称
 				beforeSingletonCreation(beanName);
 				boolean newSingleton = false;
 				boolean recordSuppressedExceptions = (this.suppressedExceptions == null);
@@ -231,6 +243,7 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 					this.suppressedExceptions = new LinkedHashSet<>();
 				}
 				try {
+					// COMMENT: 通过ObjectFactory创建Bean实例
 					singletonObject = singletonFactory.getObject();
 					newSingleton = true;
 				}
@@ -254,9 +267,13 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 					if (recordSuppressedExceptions) {
 						this.suppressedExceptions = null;
 					}
+					// COMMENT: 从singletonsCurrentlyInCreation中去除已经创建成功的Bean实例名称
 					afterSingletonCreation(beanName);
 				}
 				if (newSingleton) {
+					// COMMENT:
+					// 将创建的Bean实例添加到容器singletonObjects中，
+					// 清空earlySingletonObjects和singletonFactories缓存
 					addSingleton(beanName, singletonObject);
 				}
 			}
@@ -436,7 +453,9 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 	 * @since 4.0
 	 */
 	protected boolean isDependent(String beanName, String dependentBeanName) {
+		// COMMENT: 依赖关系的访问受锁的保护，防止并发访问。
 		synchronized (this.dependentBeanMap) {
+			// COMMENT: 返回dependentBeanName是否依赖beanName
 			return isDependent(beanName, dependentBeanName, null);
 		}
 	}
@@ -453,6 +472,8 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 		if (dependentBeans.contains(dependentBeanName)) {
 			return true;
 		}
+
+		// COMMENT: 沿着依赖关系检查是否dependentBeanName依赖beanName
 		for (String transitiveDependency : dependentBeans) {
 			if (alreadySeen == null) {
 				alreadySeen = new HashSet<>();
