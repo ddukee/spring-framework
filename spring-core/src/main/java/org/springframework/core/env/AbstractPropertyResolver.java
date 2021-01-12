@@ -39,7 +39,8 @@ import org.springframework.util.SystemPropertyUtils;
  * @author Juergen Hoeller
  * @since 3.1
  */
-public abstract class AbstractPropertyResolver implements ConfigurablePropertyResolver {
+public abstract class
+AbstractPropertyResolver implements ConfigurablePropertyResolver {
 
 	protected final Log logger = LogFactory.getLog(getClass());
 

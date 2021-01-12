@@ -518,7 +518,8 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 
 		try {
 			// Give BeanPostProcessors a chance to return a proxy instead of the target bean instance.
-			// COMMENT: 在Bean创建前调用InstantiationAwareBeanPostProcessor的postProcessBeforeInstantiation方法，
+			// COMMENT:
+			// 在Bean创建前调用InstantiationAwareBeanPostProcessor的postProcessBeforeInstantiation方法，
 			// AOP在这个阶段会为Bean创建代理，这种情况下会导致Bean创建过程短路（short-circuited）。接下来这个Bean只会被
 			// InstantiationAwareBeanPostProcessor中的postProcessBeforeInstantiation()处理。
 			Object bean = resolveBeforeInstantiation(beanName, mbdToUse);
@@ -1239,6 +1240,14 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		// 通过SmartInstantiationAwareBeanPostProcessor的
 		// determineCandidateConstructors()来识别满足条件的构造器
 		Constructor<?>[] ctors = determineConstructorsFromBeanPostProcessors(beanClass, beanName);
+
+		// COMMENT:
+		// 判断是否需要进行构造方法注入
+		// 判断条件：
+		// 1. ctros是否非空（通过BeanPostProcessor识别出来的设置了注解（@Autowire）的构造方法）
+		// 2. Bean定义是否开启了构造方法自动注入
+		// 3. Bean定义是否定义了构造注入参数
+		// 4. 创建Bean的时候传入的参数是否不为空
 		if (ctors != null || mbd.getResolvedAutowireMode() == AUTOWIRE_CONSTRUCTOR ||
 				mbd.hasConstructorArgumentValues() || !ObjectUtils.isEmpty(args)) {
 			// COMMENT: 通过有参构造方法创建Bean并进行构造方法注入依赖
@@ -1397,6 +1406,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 	protected BeanWrapper autowireConstructor(
 			String beanName, RootBeanDefinition mbd, @Nullable Constructor<?>[] ctors, @Nullable Object[] explicitArgs) {
 
+		// COMMENT： 利用ConstructorResolver进行构造方法的参数注入
 		return new ConstructorResolver(this).autowireConstructor(beanName, mbd, ctors, explicitArgs);
 	}
 
@@ -1425,7 +1435,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		// to support styles of field injection.
 
 		// COMMENT:
-		// 调用InstantiationAwareBeanPostProcessor的postProcessAfterInstantiation，
+		// 调用InstantiationAwareBeanPostProcessor的postProcessAfterInstantiation，执行实例化后置处理逻辑
 		if (!mbd.isSynthetic() && hasInstantiationAwareBeanPostProcessors()) {
 			for (InstantiationAwareBeanPostProcessor bp : getBeanPostProcessorCache().instantiationAware) {
 				if (!bp.postProcessAfterInstantiation(bw.getWrappedInstance(), beanName)) {
@@ -1471,6 +1481,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 					if (filteredPds == null) {
 						filteredPds = filterPropertyDescriptorsForDependencyCheck(bw, mbd.allowCaching);
 					}
+					// COMMENT: 处理依赖检查，检查需要注入到Bean的依赖是否都已经在BeanFactory中（@Required注解）
 					pvsToUse = bp.postProcessPropertyValues(pvs, filteredPds, bw.getWrappedInstance(), beanName);
 					if (pvsToUse == null) {
 						return;
@@ -1489,7 +1500,8 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		if (pvs != null) {
 			// COMMENT:
 			// 处理Bean属性的设置，在这里会进行基于Setter的注入
-			// 通过BeanDefinitionValueResolver解析Bean依赖
+			// 通过AbstractAutowireCapableBeanFactory#resolveDependency()方法解析依赖关系
+			// 通过BeanDefinitionValueResolver解析Bean引用
 			applyPropertyValues(beanName, mbd, bw, pvs);
 		}
 	}
@@ -1506,6 +1518,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 	protected void autowireByName(
 			String beanName, AbstractBeanDefinition mbd, BeanWrapper bw, MutablePropertyValues pvs) {
 
+		// COMMENT: 解析需要注入的字段并放到PropertyValues中
 		String[] propertyNames = unsatisfiedNonSimpleProperties(mbd, bw);
 		for (String propertyName : propertyNames) {
 			if (containsBean(propertyName)) {
@@ -1550,12 +1563,17 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		for (String propertyName : propertyNames) {
 			try {
 				PropertyDescriptor pd = bw.getPropertyDescriptor(propertyName);
+
+				// COMMENT: 不对java.lang.Object类型进行基于类型的自动注入
+
 				// Don't try autowiring by type for type Object: never makes sense,
 				// even if it technically is a unsatisfied, non-simple property.
 				if (Object.class != pd.getPropertyType()) {
+					// COMMENT: 获取Setter注入时Setter方法的参数
 					MethodParameter methodParam = BeanUtils.getWriteMethodParameter(pd);
 					// Do not allow eager init for type matching in case of a prioritized post-processor.
 					boolean eager = !(bw.getWrappedInstance() instanceof PriorityOrdered);
+					// COMMENT: 通过依赖解析逻辑对依赖的类型做自动注入
 					DependencyDescriptor desc = new AutowireByTypeDependencyDescriptor(methodParam, eager);
 					Object autowiredArgument = resolveDependency(desc, beanName, autowiredBeanNames, converter);
 					if (autowiredArgument != null) {

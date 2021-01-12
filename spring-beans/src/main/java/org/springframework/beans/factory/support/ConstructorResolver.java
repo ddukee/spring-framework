@@ -127,6 +127,7 @@ class ConstructorResolver {
 	public BeanWrapper autowireConstructor(String beanName, RootBeanDefinition mbd,
 			@Nullable Constructor<?>[] chosenCtors, @Nullable Object[] explicitArgs) {
 
+		// COMMENT: 初始化BeanWrapper
 		BeanWrapperImpl bw = new BeanWrapperImpl();
 		this.beanFactory.initBeanWrapper(bw);
 
@@ -134,10 +135,18 @@ class ConstructorResolver {
 		ArgumentsHolder argsHolderToUse = null;
 		Object[] argsToUse = null;
 
+		// COMMENT:
+		// 解析创建Bean需要的构造方法和构造方法参数
+		// 1. 如果外部传入的参数explicitArgs不为空（通过getBean()创建Bean时传入的参数），则使用该传入的参数作为构造Bean时的参数
+		// 2.1 检查RootBeanDefinition中是否有已经见解析的构造方法或工厂方法（resolvedConstructorOrFactoryMethod）
+		// 2.2 检查RootBeanDefinition中已经解析过的构造方法参数resolvedConstructorArguments（constructorArgumentsResolved = true）
+		// 2.3 如果resolvedConstructorArguments为空，则检查preparedConstructorArguments中待解析的参数，如果不为空则通过resolvePreparedArguments解析
 		if (explicitArgs != null) {
 			argsToUse = explicitArgs;
 		}
 		else {
+			// COMMENT:
+			// 检查缓存，避免重复解析。缓存数据通过ArgumentsHolder.storeCache()将缓存设置到RootBeanDefinition中
 			Object[] argsToResolve = null;
 			synchronized (mbd.constructorArgumentLock) {
 				constructorToUse = (Constructor<?>) mbd.resolvedConstructorOrFactoryMethod;
@@ -150,11 +159,15 @@ class ConstructorResolver {
 				}
 			}
 			if (argsToResolve != null) {
+				// 解析缓存在BeanDefinition中的构造方法参数
 				argsToUse = resolvePreparedArguments(beanName, mbd, bw, constructorToUse, argsToResolve);
 			}
 		}
 
-		// COMMENT: 反射获取构造方法列表
+		// COMMENT:
+		// 从Bean所在类中解析构造方法
+		// 1. 如果外部传入的chosenCtors候选构造方法列表不为空，则从这个列表中筛选合适的构造方法
+		// 2. 否则通过反射获取构造方法列表，然后从这个列表中筛选构造方法
 		if (constructorToUse == null || argsToUse == null) {
 			// Take specified constructors, if any.
 			Constructor<?>[] candidates = chosenCtors;
@@ -171,25 +184,34 @@ class ConstructorResolver {
 				}
 			}
 
-			// COMMENT: 通过没有参数的构造方法创建对象
+			// COMMENT:
+			// 判断是否是默认无参构造方法，
+			// 如果是则通过没有参数的构造方法创建对象
 			if (candidates.length == 1 && explicitArgs == null && !mbd.hasConstructorArgumentValues()) {
 				Constructor<?> uniqueCandidate = candidates[0];
 				if (uniqueCandidate.getParameterCount() == 0) {
 					synchronized (mbd.constructorArgumentLock) {
+						// COMMENT: 设置BeanDefinition中关于构造方法和参数的缓存
 						mbd.resolvedConstructorOrFactoryMethod = uniqueCandidate;
 						mbd.constructorArgumentsResolved = true;
 						mbd.resolvedConstructorArguments = EMPTY_ARGS;
 					}
+					// COMMENT: 通过无参构造器创建Bean实例
 					bw.setBeanInstance(instantiate(beanName, mbd, uniqueCandidate, EMPTY_ARGS));
 					return bw;
 				}
 			}
 
 			// Need to resolve the constructor.
+			// COMMENT: 判断是否是自动注入
+			// 自动注入条件：
+			// 1. 通过@Autowire注解修饰构造方法（被注解修饰的构造器被BeanPostProcessor筛选出来，保存在参数chosenCtors中）
+			// 2. 容器的自动注入模式被设置为构造方法自动注入（AUTOWIRE_CONSTRUCTOR）
 			boolean autowiring = (chosenCtors != null ||
 					mbd.getResolvedAutowireMode() == AutowireCapableBeanFactory.AUTOWIRE_CONSTRUCTOR);
 			ConstructorArgumentValues resolvedValues = null;
 
+			// COMMENT: 从BeanDefinition中解析定义的构造参数列表和参数数量
 			int minNrOfArgs;
 			if (explicitArgs != null) {
 				minNrOfArgs = explicitArgs.length;
@@ -197,14 +219,23 @@ class ConstructorResolver {
 			else {
 				ConstructorArgumentValues cargs = mbd.getConstructorArgumentValues();
 				resolvedValues = new ConstructorArgumentValues();
+				// COMMENT: 解析BeanDefinition中定义的构造方法参数，将构造方法参数（比如：XML中<constructor-arg/>标签定义的值）解析成Bean实例
 				minNrOfArgs = resolveConstructorArguments(beanName, mbd, bw, cargs, resolvedValues);
 			}
 
+			// COMMENT:
+			// 对构造方法列表进行排序，用于后续的构造方法查找。
+			// 按照是否为public和参数数量两个维度进行比较：
+			// 1. public比非public访问级别的优先级高
+			// 2. 参数数量多的比参数数量少的优先级高
+			// 排序结果：public构造方法按照参数数量降序排序，然后是private构造方法按照降序排序
 			AutowireUtils.sortConstructors(candidates);
 			int minTypeDiffWeight = Integer.MAX_VALUE;
 			Set<Constructor<?>> ambiguousConstructors = null;
 			Deque<UnsatisfiedDependencyException> causes = null;
 
+			// COMMENT: 通过谈心算法选择最合适的构造方法，算法如下：
+			// 1.
 			for (Constructor<?> candidate : candidates) {
 				int parameterCount = candidate.getParameterCount();
 
@@ -228,6 +259,7 @@ class ConstructorResolver {
 								paramNames = pnd.getParameterNames(candidate);
 							}
 						}
+						// COMMENT: 解析参数（如果是自动依赖注入的场景，autowiring = true，则从BeanFactory中解析依赖的Bean作为参数值）
 						argsHolder = createArgumentArray(beanName, mbd, resolvedValues, bw, paramTypes, paramNames,
 								getUserDeclaredConstructor(candidate), autowiring, candidates.length == 1);
 					}
@@ -251,6 +283,7 @@ class ConstructorResolver {
 					argsHolder = new ArgumentsHolder(explicitArgs);
 				}
 
+				// COMMENT: 选择差距最小的参数
 				int typeDiffWeight = (mbd.isLenientConstructorResolution() ?
 						argsHolder.getTypeDifferenceWeight(paramTypes) : argsHolder.getAssignabilityWeight(paramTypes));
 				// Choose this constructor if it represents the closest match.
@@ -262,6 +295,7 @@ class ConstructorResolver {
 					ambiguousConstructors = null;
 				}
 				else if (constructorToUse != null && typeDiffWeight == minTypeDiffWeight) {
+					// COMMENT: 当差距一样时，将造成歧义的构造方法记录到ambiguousConstructors中，用于后续严格模式（strict）下的异常检测
 					if (ambiguousConstructors == null) {
 						ambiguousConstructors = new LinkedHashSet<>();
 						ambiguousConstructors.add(constructorToUse);
@@ -283,6 +317,7 @@ class ConstructorResolver {
 						"(hint: specify index/type/name arguments for simple parameters to avoid type ambiguities)");
 			}
 			else if (ambiguousConstructors != null && !mbd.isLenientConstructorResolution()) {
+				// COMMENT: 当构造方法的解析不是宽容模式（严格模式）时，如果ambiguousConstructors不为空则抛出异常
 				throw new BeanCreationException(mbd.getResourceDescription(), beanName,
 						"Ambiguous constructor matches found in bean '" + beanName + "' " +
 						"(hint: specify index/type/name arguments for simple parameters to avoid type ambiguities): " +
@@ -677,6 +712,8 @@ class ConstructorResolver {
 
 		int minNrOfArgs = cargs.getArgumentCount();
 
+		// COMMENT:
+		// 解析基于index的参数，例如：对应XML中的<constructor-arg index="0" value="xxx"/>参数
 		for (Map.Entry<Integer, ConstructorArgumentValues.ValueHolder> entry : cargs.getIndexedArgumentValues().entrySet()) {
 			int index = entry.getKey();
 			if (index < 0) {
@@ -700,6 +737,8 @@ class ConstructorResolver {
 			}
 		}
 
+		// COMMENT:
+		// 解析基于类型匹配的参数，例如：对应XML中的<constructor-arg type="xxx" value="xxx"/>参数
 		for (ConstructorArgumentValues.ValueHolder valueHolder : cargs.getGenericArgumentValues()) {
 			if (valueHolder.isConverted()) {
 				resolvedValues.addGenericArgumentValue(valueHolder);
@@ -733,6 +772,10 @@ class ConstructorResolver {
 		Set<ConstructorArgumentValues.ValueHolder> usedValueHolders = new HashSet<>(paramTypes.length);
 		Set<String> autowiredBeanNames = new LinkedHashSet<>(4);
 
+		// COMMENT:
+		// 获取参数值并进行类型转换，参数值获取方式分为两种：
+		// 1. 从已经解析的参数值列表resolvedValues中获取（显式指定参数的场景）
+		// 2. 通过依赖解析的方式从BeanFactory中获取依赖的值（构造方法自动依赖注入的场景）
 		for (int paramIndex = 0; paramIndex < paramTypes.length; paramIndex++) {
 			Class<?> paramType = paramTypes[paramIndex];
 			String paramName = (paramNames != null ? paramNames[paramIndex] : "");
@@ -760,6 +803,7 @@ class ConstructorResolver {
 				else {
 					MethodParameter methodParam = MethodParameter.forExecutable(executable, paramIndex);
 					try {
+						// COMMENT: 对参数值进行类型转换
 						convertedValue = converter.convertIfNecessary(originalValue, paramType, methodParam);
 					}
 					catch (TypeMismatchException ex) {
@@ -780,6 +824,7 @@ class ConstructorResolver {
 				args.rawArguments[paramIndex] = originalValue;
 			}
 			else {
+				// COMMENT: 自动注入的场景，从构造方法中获取参数定义，然后从BeanFactory中获取依赖的Bean
 				MethodParameter methodParam = MethodParameter.forExecutable(executable, paramIndex);
 				// No explicit match found: we're either supposed to autowire or
 				// have to fail creating an argument array for the given constructor.
@@ -790,6 +835,7 @@ class ConstructorResolver {
 							"] - did you specify the correct bean references as arguments?");
 				}
 				try {
+					// COMMENT: 从BeanFactory中解析依赖的Bean（依赖的解析算法在AutowireCapableBeanFactory.resolveDependency方法中）
 					Object autowiredArgument = resolveAutowiredArgument(
 							methodParam, beanName, autowiredBeanNames, converter, fallback);
 					args.rawArguments[paramIndex] = autowiredArgument;
