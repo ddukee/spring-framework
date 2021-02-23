@@ -521,7 +521,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 			// COMMENT:
 			// 在Bean创建前调用InstantiationAwareBeanPostProcessor的postProcessBeforeInstantiation方法，
 			// AOP在这个阶段会为Bean创建代理，这种情况下会导致Bean创建过程短路（short-circuited）。接下来这个Bean只会被
-			// InstantiationAwareBeanPostProcessor中的postProcessBeforeInstantiation()处理。
+			// InstantiationAwareBeanPostProcessor中的postProcessAfterInstantiation()处理。
 			Object bean = resolveBeforeInstantiation(beanName, mbdToUse);
 			if (bean != null) {
 				return bean;
@@ -1446,7 +1446,9 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 
 		PropertyValues pvs = (mbd.hasPropertyValues() ? mbd.getPropertyValues() : null);
 
-		// COMMENT: 处理基于Setter的自动注入，自动注入分为基于类型和基于名称的自动注入。
+		// COMMENT:
+		// 处理基于Setter的自动注入，自动注入分为基于类型和基于名称的自动注入。
+		// 将需要自动注入的属性解析到PropertyValues中，用于后续统一设置Bean属性时完成真正的注入
 		int resolvedAutowireMode = mbd.getResolvedAutowireMode();
 		if (resolvedAutowireMode == AUTOWIRE_BY_NAME || resolvedAutowireMode == AUTOWIRE_BY_TYPE) {
 			MutablePropertyValues newPvs = new MutablePropertyValues(pvs);
@@ -1476,6 +1478,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 				pvs = mbd.getPropertyValues();
 			}
 			for (InstantiationAwareBeanPostProcessor bp : getBeanPostProcessorCache().instantiationAware) {
+				// COMMENT: 处理@Autowire形式的依赖注入（AutowiredAnnotationBeanPostProcessor提供实现逻辑）
 				PropertyValues pvsToUse = bp.postProcessProperties(pvs, bw.getWrappedInstance(), beanName);
 				if (pvsToUse == null) {
 					if (filteredPds == null) {
@@ -1499,7 +1502,8 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 
 		if (pvs != null) {
 			// COMMENT:
-			// 处理Bean属性的设置，在这里会进行基于Setter的注入
+			// 处理Bean属性的设置，在这里会进行在Bean定义中显式定义的Setter的注入，
+			// 并且对自动注入时生成的PropertyValues进行Bean属性设置
 			// 通过AbstractAutowireCapableBeanFactory#resolveDependency()方法解析依赖关系
 			// 通过BeanDefinitionValueResolver解析Bean引用
 			applyPropertyValues(beanName, mbd, bw, pvs);

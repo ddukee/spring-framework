@@ -1303,9 +1303,14 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 			}
 
 			Class<?> type = descriptor.getDependencyType();
+			// COMMENT:
+			// 解析默认值，@Value注解在这个阶段被AutowireCandidateResolver#getSuggestedValue()解析，@Value中的值被作为默认值。
+			// AutowireCandidateResolver用于解析满足自动注入的依赖
 			Object value = getAutowireCandidateResolver().getSuggestedValue(descriptor);
 			if (value != null) {
 				if (value instanceof String) {
+					// COMMENT: 解析占位符（如果需要的话）
+					// 如果@Value的值为占位符，则通过embeddedValueResolvers列表中的StringValueResolver解析成真正的值。
 					String strVal = resolveEmbeddedValue((String) value);
 					BeanDefinition bd = (beanName != null && containsBean(beanName) ?
 							getMergedBeanDefinition(beanName) : null);
@@ -1313,6 +1318,7 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 				}
 				TypeConverter converter = (typeConverter != null ? typeConverter : getTypeConverter());
 				try {
+					// COMMENT: 对值进行类型转换
 					return converter.convertIfNecessary(value, type, descriptor.getTypeDescriptor());
 				}
 				catch (UnsupportedOperationException ex) {
