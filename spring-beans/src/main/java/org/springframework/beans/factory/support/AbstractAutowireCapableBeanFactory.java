@@ -1215,18 +1215,22 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 			synchronized (mbd.constructorArgumentLock) {
 				if (mbd.resolvedConstructorOrFactoryMethod != null) {
 					resolved = true;
+					// COMMENT:
+					// 通过判断RootBeanDefinition的constructorArgumentsResolved来确定是否已经解析出来构造方法的参数列表，
+					// 如果是则表示Bean的构造参数需要从BeanFactory中解析，autowireNecessary设置为true。
 					autowireNecessary = mbd.constructorArgumentsResolved;
 				}
 			}
 		}
 		if (resolved) {
-			// COMMENT: 在重新创建Bean的时候免去解析构造方法的过程
 			if (autowireNecessary) {
-				// COMMENT: 通过有参构造方法创建Bean并进行构造方法注入依赖
+				// COMMENT:
+				// autowireNecessary = true表示Bean的构造过程需要额外参数，
+				// 但是构造参数应用并未显式提供（args == null），需要从BeanFactory中解析
 				return autowireConstructor(beanName, mbd, null, null);
 			}
 			else {
-				// COMMENT: 通过默认构造方法创建Bean
+				// COMMENT: Bean构造过程不需要额外参数，通过默认构造方法创建Bean
 				return instantiateBean(beanName, mbd);
 			}
 		}
@@ -1239,6 +1243,9 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		// 基于注解的构造方法注入的场景，挑选满足条件的构造器来初始化Bean
 		// 通过SmartInstantiationAwareBeanPostProcessor的
 		// determineCandidateConstructors()来识别满足条件的构造器
+		// （如果只有一个构造方法，并且没有显式声明@Autowire，
+		// 则会默认选择该构造方法作为Bean实例化的构造方法，
+		// 实现逻辑在AutowiredAnnotationBeanPostProcessor的determineCandidateConstructors()方法中）
 		Constructor<?>[] ctors = determineConstructorsFromBeanPostProcessors(beanClass, beanName);
 
 		// COMMENT:

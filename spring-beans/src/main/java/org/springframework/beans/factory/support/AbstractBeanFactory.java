@@ -153,6 +153,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 	@Nullable
 	private TypeConverter typeConverter;
 
+	// COMMENT: 字符串占位符解析器，可以用于处理@Value注解中的占位符
 	/** String resolvers to apply e.g. to annotation attribute values. */
 	private final List<StringValueResolver> embeddedValueResolvers = new CopyOnWriteArrayList<>();
 

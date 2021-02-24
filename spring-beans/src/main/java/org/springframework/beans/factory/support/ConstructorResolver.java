@@ -127,7 +127,7 @@ class ConstructorResolver {
 	public BeanWrapper autowireConstructor(String beanName, RootBeanDefinition mbd,
 			@Nullable Constructor<?>[] chosenCtors, @Nullable Object[] explicitArgs) {
 
-		// COMMENT: 初始化BeanWrapper
+		// COMMENT: 初始化BeanWrapper（从BeanFactory中获取BeanWrapperImpl依赖的类型和值转换组件：PropertyEditor和ConversionService）
 		BeanWrapperImpl bw = new BeanWrapperImpl();
 		this.beanFactory.initBeanWrapper(bw);
 
@@ -136,7 +136,7 @@ class ConstructorResolver {
 		Object[] argsToUse = null;
 
 		// COMMENT:
-		// 解析创建Bean需要的构造方法和构造方法参数
+		// 解析创建Bean需要的构造方法参数
 		// 1. 如果外部传入的参数explicitArgs不为空（通过getBean()创建Bean时传入的参数），则使用该传入的参数作为构造Bean时的参数
 		// 2.1 检查RootBeanDefinition中是否有已经见解析的构造方法或工厂方法（resolvedConstructorOrFactoryMethod）
 		// 2.2 检查RootBeanDefinition中已经解析过的构造方法参数resolvedConstructorArguments（constructorArgumentsResolved = true）
@@ -234,7 +234,7 @@ class ConstructorResolver {
 			Set<Constructor<?>> ambiguousConstructors = null;
 			Deque<UnsatisfiedDependencyException> causes = null;
 
-			// COMMENT: 通过谈心算法选择最合适的构造方法，算法如下：
+			// COMMENT: 通过贪心算法选择最合适的构造方法，算法如下：
 			// 1.
 			for (Constructor<?> candidate : candidates) {
 				int parameterCount = candidate.getParameterCount();
@@ -252,6 +252,16 @@ class ConstructorResolver {
 				Class<?>[] paramTypes = candidate.getParameterTypes();
 				if (resolvedValues != null) {
 					try {
+						// COMMENT: 获取构造参数的名称。Java默认在运行时通过反射获取不到参数的名称，但是可以通过三种方式获取运行时的名称：
+						// 1. 利用在Java 6中引入的@ConstructorProperties注解对参数名称进行标注（Spring通过ConstructorPropertiesChecker进行解析）
+						// 2. 利用启用Java 8支持的"-parameters"选项来支持通过反射方式获取参数名称
+						// 3. 通过Hack Java的Class文件来解析参数名称
+						// 方法2和方法3都是通过ParameterNameDiscoverer组件进行解析。
+						// 解析的实现逻辑在DefaultParameterNameDiscoverer中，
+						// 在DefaultParameterNameDiscoverer中包含了两个ParameterNameDiscoverer：
+						// 1. StandardReflectionParameterNameDiscoverer
+						// 2. LocalVariableTableParameterNameDiscoverer
+						// 分别对应了上面的方法2和方法3。
 						String[] paramNames = ConstructorPropertiesChecker.evaluate(candidate, parameterCount);
 						if (paramNames == null) {
 							ParameterNameDiscoverer pnd = this.beanFactory.getParameterNameDiscoverer();
@@ -260,6 +270,7 @@ class ConstructorResolver {
 							}
 						}
 						// COMMENT: 解析参数（如果是自动依赖注入的场景，autowiring = true，则从BeanFactory中解析依赖的Bean作为参数值）
+						// fallback参数用于表示是否
 						argsHolder = createArgumentArray(beanName, mbd, resolvedValues, bw, paramTypes, paramNames,
 								getUserDeclaredConstructor(candidate), autowiring, candidates.length == 1);
 					}
@@ -774,7 +785,7 @@ class ConstructorResolver {
 
 		// COMMENT:
 		// 获取参数值并进行类型转换，参数值获取方式分为两种：
-		// 1. 从已经解析的参数值列表resolvedValues中获取（显式指定参数的场景）
+		// 1. 从已经解析的参数值列表resolvedValues中获取（显式指定参数的场景，比如XML配置中的构造参数注入配置<constructor-arg/>）
 		// 2. 通过依赖解析的方式从BeanFactory中获取依赖的值（构造方法自动依赖注入的场景）
 		for (int paramIndex = 0; paramIndex < paramTypes.length; paramIndex++) {
 			Class<?> paramType = paramTypes[paramIndex];
@@ -868,16 +879,22 @@ class ConstructorResolver {
 	private Object[] resolvePreparedArguments(String beanName, RootBeanDefinition mbd, BeanWrapper bw,
 			Executable executable, Object[] argsToResolve) {
 
+		// COMMENT: 从BeanFactory获取自定义的TypeConverter
 		TypeConverter customConverter = this.beanFactory.getCustomTypeConverter();
+
+		// COMMENT：检查是否有应用自定义的TypeConverter，如果没有则使用容器默认的TypeConverter（BeanWrapperImpl）
 		TypeConverter converter = (customConverter != null ? customConverter : bw);
 		BeanDefinitionValueResolver valueResolver =
 				new BeanDefinitionValueResolver(this.beanFactory, beanName, mbd, converter);
+
+		// COMMENT: 获取构造方法的参数类型列表
 		Class<?>[] paramTypes = executable.getParameterTypes();
 
 		Object[] resolvedArgs = new Object[argsToResolve.length];
 		for (int argIndex = 0; argIndex < argsToResolve.length; argIndex++) {
 			Object argValue = argsToResolve[argIndex];
 			MethodParameter methodParam = MethodParameter.forExecutable(executable, argIndex);
+			// COMMENT: 识别
 			if (argValue == autowiredArgumentMarker) {
 				argValue = resolveAutowiredArgument(methodParam, beanName, null, converter, true);
 			}
@@ -885,8 +902,11 @@ class ConstructorResolver {
 				argValue = valueResolver.resolveValueIfNecessary("constructor argument", argValue);
 			}
 			else if (argValue instanceof String) {
+				// COMMENT: 解析BeanDefinition的字符串名称
 				argValue = this.beanFactory.evaluateBeanDefinitionString((String) argValue, mbd);
 			}
+
+			// COMMENT: 将参数转换成Bean构造方法需要的目标类型
 			Class<?> paramType = paramTypes[argIndex];
 			try {
 				resolvedArgs[argIndex] = converter.convertIfNecessary(argValue, paramType, methodParam);
